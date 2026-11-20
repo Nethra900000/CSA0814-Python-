@@ -1,1 +1,399 @@
+import time
+import sys
+from statistics import mean
+from functools import lru_cache
+
+
+def subsidy_separate(units, ration_card, age):
+    result = []
+
+    if units <= 100:
+        result.append("Full Subsidy")
+
+    if 101 <= units <= 200 and ration_card:
+        result.append("Partial Subsidy")
+
+    if units > 200 and age > 80:
+        result.append("Senior Citizen Subsidy")
+
+    if not result:
+        result.append("No Subsidy")
+
+    return result
+
+
+def subsidy_elif(units, ration_card, age):
+    if units <= 100:
+        return "Full Subsidy"
+    elif 101 <= units <= 200 and ration_card:
+        return "Partial Subsidy"
+    elif units > 200 and age > 80:
+        return "Senior Citizen Subsidy"
+    else:
+        return "No Subsidy"
+
+
+def subsidy_match(units, ration_card, age):
+    match units:
+        case n if n <= 100:
+            return "Full Subsidy"
+        case n if 101 <= n <= 200 and ration_card:
+            return "Partial Subsidy"
+        case n if n > 200 and age > 80:
+            return "Senior Citizen Subsidy"
+        case _:
+            return "No Subsidy"
+
+
+print(subsidy_separate(100, True, 45))
+print(subsidy_separate(101, True, 40))
+print(subsidy_separate(200, False, 50))
+print(subsidy_separate(201, False, 85))
+
+households = [
+    (100, True, 45),
+    (101, True, 40),
+    (200, False, 50),
+    (201, False, 85),
+    (99, False, 60),
+    (150, False, 82),
+    (200, True, 75),
+    (250, True, 65)
+]
+
+for household in households:
+    print(household, "->", subsidy_elif(*household))
+
+
+def verify_otp(correct_otp, entries):
+    attempts = 0
+
+    for entered in entries:
+        if attempts >= 3:
+            break
+
+        if entered.strip() == "":
+            continue
+
+        if entered == correct_otp:
+            print("OTP verified successfully.")
+            break
+
+        attempts += 1
+        print("Incorrect OTP. Attempts:", attempts)
+    else:
+        print("Account locked for 30 minutes.")
+
+
+def verify_otp_for(correct_otp, entries):
+    index = 0
+
+    for attempt in range(3):
+        while index < len(entries):
+            entered = entries[index]
+            index += 1
+
+            if entered.strip() != "":
+                break
+
+            print("Blank entry. Please try again.")
+        else:
+            print("No more entries.")
+            return
+
+        if entered == correct_otp:
+            print("OTP verified successfully.")
+            break
+
+        print("Incorrect OTP. Attempts:", attempt + 1)
+    else:
+        print("Account locked for 30 minutes.")
+
+
+verify_otp("123456", ["", "111111", "222222", "333333"])
+verify_otp_for("123456", ["111111", "222222", "333333"])
+verify_otp("123456", ["123456"])
+
+
+def normalise(text):
+    text = text.strip()
+    text = text.replace(" ", "")
+    text = text.replace("-", "")
+    return text.upper()
+
+
+def is_valid(reg):
+    if len(reg) not in (9, 10):
+        return False
+
+    state = reg[0:2]
+    district = reg[2:4]
+    series = reg[4:-4]
+    number = reg[-4:]
+
+    return (
+        state.isalpha()
+        and district.isdigit()
+        and len(series) in (1, 2)
+        and series.isalpha()
+        and number.isdigit()
+    )
+
+
+def format_number(reg):
+    if not is_valid(reg):
+        return "INVALID"
+
+    return reg[0:2] + " " + reg[2:4] + " " + reg[4:-4] + " " + reg[-4:]
+
+
+inputs = [
+    "tn 09 ab 1234",
+    "KA-01-M-0007",
+    "TN9AB1234",
+    "TN 22 1234 AB",
+    "MH 12 C 4567",
+    "AP 39 XY 9876"
+]
+
+for raw in inputs:
+    reg = normalise(raw)
+    print(
+        raw, "->", reg, "->",
+        "VALID" if is_valid(reg) else "INVALID",
+        "->", format_number(reg)
+    )
+
+
+def build_plus(parts):
+    text = ""
+    for p in parts:
+        text += p + ";"
+    return text
+
+
+def build_join(parts):
+    return ";".join(parts) + ";"
+
+
+def build_fstring(records):
+    parts = [f"Item{i}:Rs{i % 50}" for i in range(records)]
+    return ";".join(parts) + ";"
+
+
+def measure(function, argument):
+    times = []
+
+    for i in range(3):
+        start = time.perf_counter()
+        result = function(argument)
+        end = time.perf_counter()
+        times.append(end - start)
+
+    return result, mean(times)
+
+
+for size in (1000, 10000, 200000):
+    items = [f"Item{i}:Rs{i % 50}" for i in range(size)]
+
+    a, t_plus = measure(build_plus, items)
+    b, t_join = measure(build_join, items)
+
+    start = time.perf_counter()
+    c = build_fstring(size)
+    t_fstring = time.perf_counter() - start
+
+    print("Records:", size)
+    print("Same output:", a == b == c)
+    print("Length:", len(b))
+    print("Average += time:", round(t_plus, 6), "seconds")
+    print("Average join time:", round(t_join, 6), "seconds")
+    print("F-string + join time:", round(t_fstring, 6), "seconds")
+
+
+def add_item_buggy(item, order=[]):
+    order.append(item)
+    return order
+
+
+def add_item(item, order=None):
+    if order is None:
+        order = []
+
+    order.append(item)
+    return order
+
+
+print(add_item_buggy("Tea"), add_item_buggy("Vada"))
+print(add_item("Tea"), add_item("Vada"))
+
+customer1 = add_item("Tea")
+customer2 = add_item("Vada")
+customer3 = add_item("Coffee")
+
+print("Customer 1:", customer1)
+print("Customer 2:", customer2)
+print("Customer 3:", customer3)
+
+
+def bill(price, quantity=1, gst_rate=0.05):
+    subtotal = price * quantity
+    gst = subtotal * gst_rate
+    total = subtotal + gst
+    return total, gst
+
+
+total, gst = bill(50, quantity=2, gst_rate=0.05)
+
+print("Total:", total)
+print("GST:", gst)
+
+count = 10
+
+
+def show_local():
+    count = 3
+    print("Local count:", count)
+
+
+def increase_global():
+    global count
+    count += 1
+
+
+def outer():
+    value = 5
+
+    def inner():
+        nonlocal value
+        value += 1
+
+    inner()
+    return value
+
+
+show_local()
+increase_global()
+
+print("Global count:", count)
+print("Nonlocal value:", outer())
+print("Buggy defaults:", add_item_buggy.__defaults__)
+
+
+calls = 0
+
+
+def ways_naive(n):
+    global calls
+    calls += 1
+
+    if n <= 1:
+        return 1
+
+    return ways_naive(n - 1) + ways_naive(n - 2)
+
+
+@lru_cache(maxsize=None)
+def ways_memo(n):
+    global calls
+    calls += 1
+
+    if n <= 1:
+        return 1
+
+    return ways_memo(n - 1) + ways_memo(n - 2)
+
+
+def ways_loop(n):
+    if n <= 1:
+        return 1
+
+    previous_two = 1
+    previous_one = 1
+
+    for i in range(2, n + 1):
+        current = previous_two + previous_one
+        previous_two = previous_one
+        previous_one = current
+
+    return previous_one
+
+
+for n in range(1, 7):
+    print(n, ways_loop(n))
+
+calls = 0
+print("Naive:", ways_naive(25), "calls =", calls)
+
+calls = 0
+ways_memo.cache_clear()
+
+print("Memo:", ways_memo(25), "calls =", calls)
+
+print("Recursion limit:", sys.getrecursionlimit())
+
+ways_memo.cache_clear()
+
+try:
+    print("Memoised result:", ways_memo(1000))
+except RecursionError:
+    print("RecursionError: Recursion depth limit reached")
+
+print("Loop result:", ways_loop(1000))
+
+
+original_calls = 0
+
+
+def original_naive(n):
+    global original_calls
+    original_calls += 1
+
+    if n <= 1:
+        return 1
+
+    return original_naive(n - 1) + original_naive(n - 2)
+
+
+def redesigned_loop(n):
+    if n <= 1:
+        return 1
+
+    previous_two = 1
+    previous_one = 1
+
+    for i in range(2, n + 1):
+        current = previous_two + previous_one
+        previous_two = previous_one
+        previous_one = current
+
+    return previous_one
+
+
+original_calls = 0
+n = 25
+
+start = time.perf_counter()
+original_answer = original_naive(n)
+original_time = time.perf_counter() - start
+
+print("Original answer:", original_answer)
+print("Original calls:", original_calls)
+print("Original time:", original_time)
+
+start = time.perf_counter()
+redesigned_answer = redesigned_loop(n)
+redesigned_time = time.perf_counter() - start
+
+print("Redesigned answer:", redesigned_answer)
+print("Redesigned time:", redesigned_time)
+print("Answers match:", original_answer == redesigned_answer)
+
+start = time.perf_counter()
+large_answer = redesigned_loop(1000)
+large_time = time.perf_counter() - start
+
+print("Redesigned 1000 steps:", large_answer)
+print("Execution time:", large_time)
+
 
