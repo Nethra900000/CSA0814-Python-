@@ -1,1 +1,343 @@
+import csv
+import io
+import sqlite3
+import re
 
+# =====================================================
+# B2.1 – ADVERSARIAL CSV TESTING
+# =====================================================
+
+def test_csv(data, delimiter=",", encoding="utf-8"):
+    try:
+        # Decode byte data using the specified encoding
+        if isinstance(data, bytes):
+            data = data.decode(encoding)
+
+        if not data:
+            print("Error: CSV file is empty")
+            return
+
+        reader = csv.DictReader(
+            io.StringIO(data),
+            delimiter=delimiter
+        )
+
+        required = {"station", "date", "pm25"}
+
+        if reader.fieldnames is None:
+            print("Error: Empty CSV file")
+            return
+
+        if not required.issubset(set(reader.fieldnames)):
+            print("Error: Required column missing")
+            return
+
+        rows = list(reader)
+
+        if not rows:
+            print("Error: No data records found")
+            return
+
+        print("CSV loaded successfully:", rows)
+
+    except UnicodeDecodeError:
+        print("Error: Unable to decode CSV using", encoding)
+
+    except Exception as e:
+        print("Error:", e)
+
+
+print("=" * 55)
+print("B2.1 – ADVERSARIAL CSV TESTING")
+print("=" * 55)
+
+print("\nTest 1: Missing PM2.5 column")
+test_csv(
+    "station,date\n"
+    "Adyar,2026-10-01\n"
+)
+
+print("\nTest 2: Semicolon delimiter")
+test_csv(
+    "station;date;pm25\n"
+    "Adyar;2026-10-01;48\n"
+)
+
+print("\nTest 3: UTF-16 encoding")
+utf16_data = (
+    "station,date,pm25\n"
+    "Adyar,2026-10-01,48\n"
+).encode("utf-16")
+
+test_csv(utf16_data, encoding="utf-16")
+
+print("\nTest 4: Empty file")
+test_csv("")
+
+
+# =====================================================
+# B2.2 – SQL INJECTION TESTING
+# =====================================================
+
+print("\n" + "=" * 55)
+print("B2.2 – SQL INJECTION TESTING")
+print("=" * 55)
+
+readings = [
+    ("Adyar", "2026-10-01", 48.0),
+    ("Guindy", "2026-10-01", 95.0),
+    ("Guindy", "2026-10-03", 121.0),
+    ("Adyar", "2026-10-04", 60.0)
+]
+
+con = sqlite3.connect(":memory:")
+
+con.execute("""
+CREATE TABLE aq (
+    station TEXT,
+    day TEXT,
+    pm25 REAL
+)
+""")
+
+# TODO 1: Insert records using executemany()
+
+con.executemany(
+    "INSERT INTO aq VALUES (?, ?, ?)",
+    readings
+)
+
+con.commit()
+
+
+# TODO 2: Parameterised SELECT query
+
+def station_average(name):
+    result = con.execute(
+        """
+        SELECT AVG(pm25)
+        FROM aq
+        WHERE station = ?
+        """,
+        (name,)
+    ).fetchone()
+
+    return result[0]
+
+
+print("\nStation Averages:")
+
+print("Adyar:", station_average("Adyar"))
+print("Guindy:", station_average("Guindy"))
+
+
+# SQL Injection Test
+
+malicious_input = "Adyar' OR '1'='1"
+
+# Unsafe query – only for demonstrating the vulnerability
+unsafe_query = (
+    "SELECT * FROM aq WHERE station = '"
+    + malicious_input + "'"
+)
+
+unsafe_result = con.execute(
+    unsafe_query
+).fetchall()
+
+print("\nUnsafe SQL Injection Test:")
+print("Records returned:", len(unsafe_result))
+
+# Safe parameterised query
+safe_result = station_average(malicious_input)
+
+print("\nParameterized SQL Injection Test:")
+print(safe_result)
+
+
+# Comparison of executemany() and execute()
+
+def insert_with_loop(cursor, rows):
+    for row in rows:
+        cursor.execute(
+            "INSERT INTO aq VALUES (?, ?, ?)",
+            row
+        )
+
+
+print("\nInsertion Methods:")
+print("executemany(): Batch insertion")
+print("execute(): One record at a time")
+
+
+# =====================================================
+# B2.3 – ADVERSARIAL SENTIMENT TESTING
+# =====================================================
+
+print("\n" + "=" * 55)
+print("B2.3 – ADVERSARIAL SENTIMENT TESTING")
+print("=" * 55)
+
+positive_words = {
+    "good", "excellent", "clean",
+    "better", "love", "improved"
+}
+
+negative_words = {
+    "bad", "poor", "dirty",
+    "terrible", "polluted", "dangerous"
+}
+
+negation_words = {"not", "never", "no"}
+
+
+def sentiment(text):
+
+    words = re.findall(
+        r"\b[\w']+\b",
+        text.lower()
+    )
+
+    positive = 0
+    negative = 0
+
+    for i, word in enumerate(words):
+
+        negated = (
+            i > 0 and
+            words[i - 1] in negation_words
+        )
+
+        if word in positive_words:
+
+            if negated:
+                negative += 1
+            else:
+                positive += 1
+
+        elif word in negative_words:
+
+            if negated:
+                positive += 1
+            else:
+                negative += 1
+
+    if positive > negative:
+        return "Positive"
+
+    elif negative > positive:
+        return "Negative"
+
+    else:
+        return "Neutral"
+
+
+# Adversarial test sentences
+
+tests = [
+    (
+        "Sarcasm",
+        "The air quality is excellent; I love breathing polluted air!"
+    ),
+    (
+        "Double negative",
+        "The air quality is not bad."
+    ),
+    (
+        "Mixed opinions",
+        "The air quality is good in the morning but terrible in the evening."
+    )
+]
+
+for name, sentence in tests:
+
+    print("\nTest:", name)
+    print("Input:", sentence)
+    print("Basic word-list result:", sentiment(sentence))
+
+
+# =====================================================
+# B2.4 – ANALYSIS OF ADVERSARIAL INPUTS
+# =====================================================
+
+print("\n" + "=" * 55)
+print("B2.4 – ANALYSIS OF ADVERSARIAL INPUTS")
+print("=" * 55)
+
+analysis = [
+    ("Missing column",
+     "Incomplete CSV structure",
+     "Validate required columns"),
+
+    ("Wrong delimiter",
+     "Incorrect CSV parsing",
+     "Detect or specify delimiter"),
+
+    ("UTF-16 encoding",
+     "Character decoding problem",
+     "Support multiple encodings"),
+
+    ("Empty file",
+     "No available data",
+     "Check file before processing"),
+
+    ("SQL injection",
+     "Database security weakness",
+     "Use parameterised queries"),
+
+    ("Sarcasm",
+     "Lack of contextual understanding",
+     "Use a trained language model"),
+
+    ("Double negatives",
+     "Negation handling weakness",
+     "Improve negation detection"),
+
+    ("Mixed opinions",
+     "Loss of sentence-level sentiment",
+     "Use contextual sentiment analysis")
+]
+
+print("\nAdversarial Input | Problem | Improvement")
+
+for item in analysis:
+    print(item)
+
+
+# =====================================================
+# COMPLEXITY ANALYSIS
+# =====================================================
+
+print("\n" + "=" * 55)
+print("TIME AND SPACE COMPLEXITY")
+print("=" * 55)
+
+print("""
+1. CSV Testing:
+   Time Complexity: O(n)
+   Space Complexity: O(n) for storing parsed rows.
+
+2. SQL executemany():
+   Time Complexity: O(n)
+   Space Complexity: O(n) when input records are stored
+   in a list.
+
+3. execute() in a loop:
+   Time Complexity: O(n)
+   Additional Space: O(1) when processing one row
+   at a time.
+
+4. Parameterised SQL:
+   Protects the database from SQL injection.
+
+5. Sentiment Analysis:
+   Time Complexity: O(n)
+   Space Complexity: O(n) for storing words.
+
+6. Adversarial Testing:
+   Identifies invalid inputs and program weaknesses.
+""")
+
+print("\nALL ADVERSARIAL TESTS COMPLETED SUCCESSFULLY.")
+
+con.close()
