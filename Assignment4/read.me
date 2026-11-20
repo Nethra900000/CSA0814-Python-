@@ -1,1 +1,627 @@
+from pathlib import Path
+from decimal import Decimal, InvalidOperation
+from datetime import date
+import csv
+import tempfile
+import re
 
+
+# FILE PROCESSING – MESS BILL
+
+def process_file(filename):
+    total = Decimal("0.00")
+    rejected = []
+
+    try:
+        with open(filename, "r", encoding="utf-8") as file:
+            for line_no, line in enumerate(file, start=1):
+                if not line.strip():
+                    continue
+
+                try:
+                    parts = line.strip().split(",", 2)
+
+                    if len(parts) != 3:
+                        raise ValueError("Incorrect number of fields")
+
+                    reg_no, name, amount_text = map(str.strip, parts)
+
+                    if not reg_no or not name:
+                        raise ValueError("Missing register number or name")
+
+                    amount = Decimal(amount_text)
+
+                    if not amount.is_finite() or amount < 0:
+                        raise ValueError("Invalid bill amount")
+
+                    total += amount
+                    print(reg_no, name, amount)
+
+                except (ValueError, InvalidOperation) as error:
+                    rejected.append(
+                        f"Line {line_no}: {line.strip()} - {error}"
+                    )
+
+        print("Total Mess Bill:", total)
+        print("Rejected Records:")
+
+        for record in rejected:
+            print(record)
+
+    except FileNotFoundError:
+        print("Error: File not found.")
+
+    except PermissionError:
+        print("Error: Permission denied.")
+
+    except OSError as error:
+        print("File error:", error)
+
+
+# BIOMETRIC ATTENDANCE PROCESSING
+
+def process_attendance(folder):
+    folder = Path(folder)
+    attendance = {}
+    damaged = []
+
+    for file in sorted(folder.glob("*.txt")):
+        try:
+            with open(file, "r", encoding="utf-8") as source:
+                for line_no, line in enumerate(source, start=1):
+                    if not line.strip():
+                        continue
+
+                    parts = line.strip().split(",")
+
+                    if len(parts) != 3:
+                        damaged.append(
+                            f"{file.name}, Line {line_no}"
+                        )
+                        continue
+
+                    reg, day, status = map(str.strip, parts)
+
+                    try:
+                        date.fromisoformat(day)
+
+                        if not reg or status not in ("P", "A"):
+                            raise ValueError
+
+                    except ValueError:
+                        damaged.append(
+                            f"{file.name}, Line {line_no}"
+                        )
+                        continue
+
+                    if reg not in attendance:
+                        attendance[reg] = [0, 0]
+
+                    attendance[reg][1] += 1
+
+                    if status == "P":
+                        attendance[reg][0] += 1
+
+        except (FileNotFoundError, PermissionError, UnicodeDecodeError, OSError) as error:
+            damaged.append(f"{file.name}: {error}")
+
+    with open("monthly_attendance.txt", "w", encoding="utf-8") as report:
+        report.write("MONTHLY ATTENDANCE REPORT\n")
+
+        for reg, counts in sorted(attendance.items()):
+            present, total = counts
+            percentage = present / total * 100
+
+            report.write(f"{reg}: {percentage:.2f}%\n")
+
+            if percentage < 75:
+                report.write("Below 75% attendance\n")
+
+    with open("damaged_lines.log", "w", encoding="utf-8") as log:
+        for record in damaged:
+            log.write(record + "\n")
+
+    print("Monthly reports generated successfully.")
+
+
+# CUSTOM EXCEPTION HANDLING
+
+class InvalidRecord(Exception):
+    pass
+
+
+def parse_line(line):
+    parts = line.strip().split(",")
+
+    if len(parts) != 3:
+        raise InvalidRecord(
+            f"expected 3 fields, found {len(parts)}"
+        )
+
+    reg, day, status = map(str.strip, parts)
+
+    if not reg:
+        raise InvalidRecord("missing register number")
+
+    if status not in ("P", "A"):
+        raise InvalidRecord(f"invalid status '{status}'")
+
+    try:
+        date.fromisoformat(day)
+    except ValueError as error:
+        raise InvalidRecord("invalid date") from error
+
+    return reg, day, status
+
+
+def summarise(path):
+    present = 0
+    absent = 0
+    errors = []
+
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            for line_no, line in enumerate(file, start=1):
+                if not line.strip():
+                    continue
+
+                try:
+                    reg, day, status = parse_line(line)
+
+                except InvalidRecord as error:
+                    errors.append((line_no, str(error)))
+                    continue
+
+                if status == "P":
+                    present += 1
+                else:
+                    absent += 1
+
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            f"Attendance file not found: {path}"
+        ) from error
+
+    except PermissionError as error:
+        raise RuntimeError(
+            f"Permission denied: {path}"
+        ) from error
+
+    except UnicodeDecodeError as error:
+        raise RuntimeError(
+            f"Wrong file encoding: {path}"
+        ) from error
+
+    else:
+        return present, absent, errors
+
+    finally:
+        print("Finished processing:", Path(path).name)
+
+
+# LIBRARY BOOK RETURN PROCESSING
+
+def save_returns(books, log_file):
+    with open(log_file, "a", encoding="utf-8") as log:
+        for book in books:
+            if book.strip():
+                log.write(book.strip() + "\n")
+
+
+def process_returns(day_file, log_file, error_log):
+    try:
+        with open(day_file, "r", encoding="utf-8") as file:
+            books = file.read().splitlines()
+
+        save_returns(books, log_file)
+
+    except FileNotFoundError:
+        message = f"Missing file: {day_file}"
+        with open(error_log, "a", encoding="utf-8") as file:
+            file.write(message + "\n")
+        print(message)
+
+    except PermissionError:
+        message = f"Permission denied: {day_file}"
+        with open(error_log, "a", encoding="utf-8") as file:
+            file.write(message + "\n")
+        print(message)
+
+    except (UnicodeDecodeError, OSError) as error:
+        message = f"File error: {day_file} - {error}"
+        with open(error_log, "a", encoding="utf-8") as file:
+            file.write(message + "\n")
+        print(message)
+
+
+# ATTENDANCE STATISTICS
+
+def read_attendance(filename):
+    records = []
+
+    with open(filename, "r", encoding="utf-8") as file:
+        for line in file:
+            parts = line.strip().split(",")
+
+            if len(parts) == 3 and parts[2].strip() in ("P", "A"):
+                records.append(
+                    [part.strip() for part in parts]
+                )
+
+    return records
+
+
+def percentage(records):
+    if not records:
+        return 0
+
+    present = sum(1 for record in records if record[2] == "P")
+    return present / len(records) * 100
+
+
+def absent_three_days(records):
+    students = {}
+
+    for reg, day, status in records:
+        students.setdefault(reg, []).append((day, status))
+
+    result = []
+
+    for reg, entries in students.items():
+        entries.sort(key=lambda item: item[0])
+
+        for index in range(len(entries) - 2):
+            first = date.fromisoformat(entries[index][0])
+            second = date.fromisoformat(entries[index + 1][0])
+            third = date.fromisoformat(entries[index + 2][0])
+
+            if (
+                entries[index][1] == "A"
+                and entries[index + 1][1] == "A"
+                and entries[index + 2][1] == "A"
+                and (second - first).days == 1
+                and (third - second).days == 1
+            ):
+                result.append(reg)
+                break
+
+    return result
+
+
+def write_attendance_report(records):
+    with open("report.txt", "w", encoding="utf-8") as file:
+        file.write("Attendance Report\n")
+        file.write(f"Attendance: {percentage(records):.2f}%\n")
+        file.write("Students absent for three days:\n")
+
+        for reg in absent_three_days(records):
+            file.write(reg + "\n")
+
+
+# COLLEGE FEST REGISTRATION SYSTEM
+
+class InvalidRegistration(Exception):
+    pass
+
+
+def valid_email(email):
+    email = email.strip()
+
+    if email.count("@") != 1:
+        return False
+
+    local, domain = email.split("@")
+
+    return (
+        bool(local)
+        and bool(domain)
+        and "." in domain
+        and not any(character.isspace() for character in email)
+        and not domain.startswith(".")
+        and not domain.endswith(".")
+    )
+
+
+def validate_registration(line):
+    parts = line.strip().split(",", 4)
+
+    if len(parts) != 5:
+        raise InvalidRegistration("Incorrect number of fields")
+
+    reg, name, dept, email, events = map(str.strip, parts)
+
+    if not all((reg, name, dept, email, events)):
+        raise InvalidRegistration("Missing required field")
+
+    if not valid_email(email):
+        raise InvalidRegistration("Invalid email address")
+
+    event_list = [event.strip() for event in events.split(";")]
+
+    if not event_list or any(not event for event in event_list):
+        raise InvalidRegistration("Invalid event list")
+
+    return {
+        "reg": reg,
+        "name": name,
+        "dept": dept,
+        "email": email,
+        "events": event_list
+    }
+
+
+def write_fest_reports(records, event_data, errors, output_dir):
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(
+        output_dir / "master_list.csv",
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as file:
+        writer = csv.writer(file)
+
+        writer.writerow([
+            "Register Number",
+            "Name",
+            "Department",
+            "Email",
+            "Events"
+        ])
+
+        for student in records:
+            writer.writerow([
+                student["reg"],
+                student["name"],
+                student["dept"],
+                student["email"],
+                ";".join(student["events"])
+            ])
+
+    for event, students in event_data.items():
+        safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", event)
+
+        with open(
+            output_dir / f"event_{safe_name}.txt",
+            "w",
+            encoding="utf-8"
+        ) as file:
+            for student in students:
+                file.write(
+                    f'{student["reg"]}, {student["name"]}\n'
+                )
+
+    with open(
+        output_dir / "summary.txt",
+        "w",
+        encoding="utf-8"
+    ) as file:
+        file.write("COLLEGE FEST SUMMARY\n")
+        file.write(f"Total valid registrations: {len(records)}\n")
+        file.write(f"Total events: {len(event_data)}\n")
+
+        for event, students in event_data.items():
+            file.write(
+                f"{event}: {len(students)} participants\n"
+            )
+
+    with open(
+        output_dir / "error.log",
+        "w",
+        encoding="utf-8"
+    ) as file:
+        for error in errors:
+            file.write(error + "\n")
+
+
+def process_fest(input_dir, output_dir):
+    departments = ["CSE", "ECE", "EEE", "MECH", "CIVIL"]
+
+    seen = set()
+    records = []
+    event_data = {}
+    errors = []
+
+    for dept in departments:
+        path = Path(input_dir) / f"{dept}.txt"
+
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                for line_no, line in enumerate(file, start=1):
+                    if not line.strip():
+                        continue
+
+                    try:
+                        student = validate_registration(line)
+
+                        if student["reg"] in seen:
+                            raise InvalidRegistration(
+                                "Duplicate registration"
+                            )
+
+                        seen.add(student["reg"])
+                        records.append(student)
+
+                        for event in student["events"]:
+                            event_data.setdefault(event, [])
+                            event_data[event].append(student)
+
+                    except InvalidRegistration as error:
+                        errors.append(
+                            f"{path.name}, Line {line_no}: {error}"
+                        )
+
+        except FileNotFoundError:
+            errors.append(
+                f"Missing department file: {path.name}"
+            )
+
+        except PermissionError:
+            errors.append(
+                f"Permission denied: {path.name}"
+            )
+
+        except UnicodeDecodeError:
+            errors.append(
+                f"Wrong encoding: {path.name}"
+            )
+
+        except OSError as error:
+            errors.append(
+                f"File error in {path.name}: {error}"
+            )
+
+    write_fest_reports(
+        records,
+        event_data,
+        errors,
+        Path(output_dir)
+    )
+
+    print("Processing completed.")
+    print("Valid registrations:", len(records))
+    print("Errors found:", len(errors))
+
+
+# MAIN PROGRAM
+
+with tempfile.TemporaryDirectory() as temporary_folder:
+    base = Path(temporary_folder)
+
+    print("\nMESS BILL PROCESSING")
+
+    mess_file = base / "mess_oct.txt"
+    mess_file.write_text(
+        "101,Amrutha,1250.50\n"
+        "102,Bhavya,1400.00\n"
+        "103,Nethra,1200.75\n"
+        "104,Invalid,abc\n"
+        "105,Harsha\n",
+        encoding="utf-8"
+    )
+
+    process_file(mess_file)
+
+    print("\nBIOMETRIC ATTENDANCE PROCESSING")
+
+    attendance_folder = base / "attendance"
+    attendance_folder.mkdir()
+
+    (attendance_folder / "attendance_day1.txt").write_text(
+        "101,2026-11-01,P\n"
+        "102,2026-11-01,A\n"
+        "103,2026-11-01,X\n",
+        encoding="utf-8"
+    )
+
+    process_attendance(attendance_folder)
+
+    print("\nCUSTOM EXCEPTION HANDLING")
+
+    sample_file = base / "sample_attendance.csv"
+    sample_file.write_text(
+        "192311001,2026-10-08,P\n"
+        "192311002,2026-10-08,A\n"
+        "192311003,2026-10-08\n"
+        "192311004,2026-10-08,L\n",
+        encoding="utf-8"
+    )
+
+    print(summarise(sample_file))
+
+    try:
+        summarise(base / "missing_attendance.csv")
+    except RuntimeError as error:
+        print("Error:", error)
+        print("Original cause:", type(error.__cause__).__name__)
+
+    print("\nLIBRARY BOOK RETURN PROCESSING")
+
+    library_folder = base / "library_records"
+    library_folder.mkdir()
+
+    returns_log = library_folder / "returns.log"
+    errors_log = library_folder / "errors.log"
+
+    for day in range(1, 4):
+        day_file = library_folder / f"day{day}.txt"
+
+        day_file.write_text(
+            f"Book{day}A\nBook{day}B\n",
+            encoding="utf-8"
+        )
+
+        process_returns(day_file, returns_log, errors_log)
+
+    print("Final Returns Log:")
+    print(returns_log.read_text(encoding="utf-8"))
+
+    print("Error Log:")
+    print(errors_log.read_text(encoding="utf-8"))
+
+    print("\nATTENDANCE STATISTICS")
+
+    statistics_file = base / "attendance.txt"
+    statistics_file.write_text(
+        "101,2026-11-01,P\n"
+        "101,2026-11-02,A\n"
+        "101,2026-11-03,A\n"
+        "101,2026-11-04,A\n"
+        "102,2026-11-01,P\n"
+        "102,2026-11-02,P\n"
+        "102,2026-11-03,A\n"
+        "102,2026-11-04,P\n",
+        encoding="utf-8"
+    )
+
+    attendance_records = read_attendance(statistics_file)
+
+    print(f"Attendance: {percentage(attendance_records):.2f}%")
+    print(
+        "Absent for three consecutive days:",
+        absent_three_days(attendance_records)
+    )
+
+    write_attendance_report(attendance_records)
+
+    print("\nCOLLEGE FEST REGISTRATION SYSTEM")
+
+    input_folder = base / "input"
+    output_folder = base / "output"
+    input_folder.mkdir()
+
+    (input_folder / "CSE.txt").write_text(
+        "192311001,Amrutha,CSE,amrutha@gmail.com,Music;Dance\n"
+        "192311002,Bhavya,CSE,bhavya@gmail.com,Quiz;Dance\n",
+        encoding="utf-8"
+    )
+
+    (input_folder / "ECE.txt").write_text(
+        "192311001,Amrutha,ECE,amrutha@gmail.com,Music\n"
+        "192311003,Nethra,ECE,nethra@gmail.com,Quiz\n",
+        encoding="utf-8"
+    )
+
+    (input_folder / "EEE.txt").write_text(
+        "192311004,Kavya,EEE,kavyaemail.com,Music\n"
+        "192311005,Divya,EEE,divya@gmail.com,Dance\n",
+        encoding="utf-8"
+    )
+
+    (input_folder / "MECH.txt").write_text(
+        "192311006,Harsha,MECH,harsha@gmail.com,Quiz\n"
+        "192311007,MECH\n",
+        encoding="utf-8"
+    )
+
+    process_fest(input_folder, output_folder)
+
+    print("\nCOLLEGE FEST SUMMARY")
+    print(
+        (output_folder / "summary.txt").read_text(encoding="utf-8")
+    )
+
+    print("ERROR LOG")
+    print(
+        (output_folder / "error.log").read_text(encoding="utf-8")
+    )
