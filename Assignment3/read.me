@@ -1,1 +1,559 @@
+import random
+import time
+import copy
+import string
+import sys
+from collections import Counter
 
+# Daily Rainfall Records
+
+random.seed(10)
+readings = [random.randint(0, 50) for _ in range(365)]
+
+weekly_totals = [
+    sum(readings[i:i + 7])
+    for i in range(0, len(readings), 7)
+]
+
+maximum = max(readings)
+minimum = min(readings)
+
+def moving_average_naive(data):
+    return [
+        sum(data[i:i + 7]) / 7
+        for i in range(len(data) - 6)
+    ]
+
+def moving_average_running(data):
+    if len(data) < 7:
+        return []
+
+    averages = []
+    current_sum = sum(data[:7])
+    averages.append(current_sum / 7)
+
+    for i in range(7, len(data)):
+        current_sum += data[i] - data[i - 7]
+        averages.append(current_sum / 7)
+
+    return averages
+
+dry_days = [
+    i + 1 for i, value in enumerate(readings)
+    if value == 0
+]
+
+print("Weekly totals:", weekly_totals)
+print("Maximum rainfall:", maximum)
+print("Maximum day:", readings.index(maximum) + 1)
+print("Minimum rainfall:", minimum)
+print("Minimum day:", readings.index(minimum) + 1)
+print("Dry days:", dry_days)
+print("Naive moving average:", moving_average_naive(readings)[:5])
+print("Running sum average:", moving_average_running(readings)[:5])
+
+
+# Tuples, Mutability and Copying
+
+rows, cols = 3, 4
+
+bad = [[0] * cols] * rows
+bad[0][1] = 7
+
+good = [[0 for j in range(cols)] for i in range(rows)]
+good[0][1] = 7
+
+print("\nBad:", bad)
+print("Good:", good)
+print(bad[0] is bad[1], good[0] is good[1])
+
+stops = {
+    (13.0827, 80.2707): "Chennai Central",
+    (13.0418, 80.2341): "T. Nagar"
+}
+
+print(stops[(13.0418, 80.2341)])
+
+original = [10, 20, 30]
+alias = original
+alias[0] = 99
+
+print("Original:", original)
+print("Alias:", alias)
+
+a = [[1, 2], [3, 4]]
+b = a.copy()
+b[0][0] = 100
+
+print("Original list:", a)
+print("Shallow copy:", b)
+
+x = [[1, 2], [3, 4]]
+y = copy.deepcopy(x)
+y[0][0] = 500
+
+print("Original:", x)
+print("Deep copy:", y)
+
+coordinates = [
+    (13.0827, 80.2707),
+    (13.0418, 80.2341)
+]
+
+for latitude, longitude in coordinates:
+    print("Latitude:", latitude)
+    print("Longitude:", longitude)
+
+data = ([1, 2, 3], "Bus")
+data[0].append(4)
+print("Tuple containing list:", data)
+
+values_list = list(range(100000))
+values_tuple = tuple(range(100000))
+
+print("List size:", sys.getsizeof(values_list))
+print("Tuple size:", sys.getsizeof(values_tuple))
+
+
+# Farmer Helpline Complaint Analysis
+
+calls = [
+    "seeds not received seeds delayed",
+    "fertiliser price high",
+    "seeds price high subsidy not received"
+]
+
+STOP = {"not", "high"}
+
+def frequencies(texts, stop):
+    counts = {}
+
+    for text in texts:
+        text = text.lower()
+        text = text.translate(
+            str.maketrans("", "", string.punctuation)
+        )
+
+        for word in text.split():
+            if word not in stop:
+                counts[word] = counts.get(word, 0) + 1
+
+    return counts
+
+def top(counts, k):
+    return sorted(
+        counts.items(),
+        key=lambda item: (-item[1], item[0])
+    )[:k]
+
+print("\nTop words:", top(frequencies(calls, STOP), 3))
+
+district_complaints = {
+    "Chennai": ["Seeds delayed", "Fertiliser price high"],
+    "Nellore": ["Subsidy not received"],
+    "Vellore": ["Seeds not received"]
+}
+
+for district, complaints in district_complaints.items():
+    print(district, ":", complaints)
+
+crop_complaints = {}
+crop_complaints.setdefault("Rice", []).append("Seeds delayed")
+crop_complaints.setdefault("Wheat", []).append("Fertiliser price high")
+crop_complaints.setdefault("Rice", []).append("Subsidy not received")
+
+print("Crop complaints:", crop_complaints)
+
+
+# Elective Registration Clash Detection
+
+ai_elective = {
+    "192311001", "192311004",
+    "192311007", "192311009"
+}
+
+iot_elective = {
+    "192311002", "192311004",
+    "192311009", "192311010"
+}
+
+all_students = {
+    f"1923110{i:02d}" for i in range(1, 11)
+}
+
+both = ai_elective & iot_elective
+exactly_one = ai_elective ^ iot_elective
+neither = all_students - (ai_elective | iot_elective)
+
+print("\nClash:", sorted(both))
+print("Exactly one:", sorted(exactly_one))
+print("Neither:", sorted(neither))
+
+both_method = ai_elective.intersection(iot_elective)
+exactly_one_method = ai_elective.symmetric_difference(iot_elective)
+neither_method = all_students.difference(
+    ai_elective.union(iot_elective)
+)
+
+print("\nUsing set methods:")
+print("Clash:", sorted(both_method))
+print("Exactly one:", sorted(exactly_one_method))
+print("Neither:", sorted(neither_method))
+
+empty = set()
+print("\nEmpty intersection:", empty & ai_elective)
+print("Identical elective intersection:", ai_elective & ai_elective)
+
+
+# Cleaning Sensor Readings
+
+readings = [4, 5, 60, -55, 7, 9, 3, 55, 6, 1]
+
+valid = []
+fahrenheit = []
+
+for c in readings:
+    if -50 <= c <= 50:
+        valid.append(c)
+        fahrenheit.append((c * 9 / 5) + 32)
+
+alarms = []
+
+for minute, c in enumerate(readings, start=1):
+    if -50 <= c <= 50 and (c < 2 or c > 8):
+        alarms.append(minute)
+
+print("\nFor loop valid readings:", valid)
+print("Fahrenheit:", fahrenheit)
+print("Alarm minutes:", alarms)
+
+valid_comp = [
+    c for c in readings if -50 <= c <= 50
+]
+
+fahrenheit_comp = [
+    (c * 9 / 5) + 32 for c in valid_comp
+]
+
+alarms_comp = [
+    minute for minute, c in enumerate(readings, start=1)
+    if -50 <= c <= 50 and (c < 2 or c > 8)
+]
+
+print("\nList comprehension:", valid_comp)
+print("Fahrenheit:", fahrenheit_comp)
+print("Alarm minutes:", alarms_comp)
+
+valid_map = list(
+    filter(lambda c: -50 <= c <= 50, readings)
+)
+
+fahrenheit_map = list(
+    map(lambda c: (c * 9 / 5) + 32, valid_map)
+)
+
+alarms_map = [
+    minute for minute, c in enumerate(readings, start=1)
+    if -50 <= c <= 50 and (c < 2 or c > 8)
+]
+
+print("\nFilter result:", valid_map)
+print("Map result:", fahrenheit_map)
+print("Alarm minutes:", alarms_map)
+
+temperature_dict = {
+    minute: c
+    for minute, c in enumerate(readings, start=1)
+    if -50 <= c <= 50
+}
+
+print("\nTemperature dictionary:", temperature_dict)
+
+valid_set = {
+    c for c in readings if -50 <= c <= 50
+}
+
+print("Valid temperature set:", valid_set)
+
+valid_generator = (
+    c for c in readings if -50 <= c <= 50
+)
+
+print("Generator values:", list(valid_generator))
+
+print("\nAll results match:", valid == valid_comp == valid_map)
+print("Fahrenheit results match:",
+      fahrenheit == fahrenheit_comp == fahrenheit_map)
+print("All valid:",
+      [c for c in [3, 4, 5] if -50 <= c <= 50])
+print("All invalid:",
+      [c for c in [60, -60, 100] if -50 <= c <= 50])
+
+
+# Railway Timetable
+
+trains = {
+    "12601": {
+        "name": "Chennai Express",
+        "stations": [
+            ("Chennai", "06:00", "06:10"),
+            ("Katpadi", "08:00", "08:05"),
+            ("Bangalore", "10:30", "10:40")
+        ],
+        "days": {"Monday", "Wednesday", "Friday"}
+    },
+    "12602": {
+        "name": "Coimbatore Express",
+        "stations": [
+            ("Chennai", "07:00", "07:15"),
+            ("Salem", "11:00", "11:05"),
+            ("Coimbatore", "13:30", "13:40")
+        ],
+        "days": {"Tuesday", "Thursday", "Saturday"}
+    },
+    "12603": {
+        "name": "Madurai Express",
+        "stations": [
+            ("Chennai", "08:00", "08:10"),
+            ("Trichy", "12:00", "12:05"),
+            ("Madurai", "14:30", "14:40")
+        ],
+        "days": {"Monday", "Tuesday", "Friday"}
+    },
+    "12604": {
+        "name": "Bangalore Express",
+        "stations": [
+            ("Chennai", "09:00", "09:15"),
+            ("Katpadi", "11:00", "11:05"),
+            ("Bangalore", "13:30", "13:40")
+        ],
+        "days": {"Wednesday", "Thursday", "Sunday"}
+    },
+    "12605": {
+        "name": "Trichy Express",
+        "stations": [
+            ("Chennai", "10:00", "10:10"),
+            ("Villupuram", "12:00", "12:05"),
+            ("Trichy", "15:00", "15:10")
+        ],
+        "days": {"Monday", "Saturday", "Sunday"}
+    }
+}
+
+for train_no, details in trains.items():
+    print("\nTrain Number:", train_no)
+    print("Train Name:", details["name"])
+    print("Running Days:", sorted(details["days"]))
+
+    for station, arrival, departure in details["stations"]:
+        print(station, arrival, departure)
+
+def search_station(trains, station, day):
+    results = []
+
+    for train_no, details in trains.items():
+        if day not in details["days"]:
+            continue
+
+        for name, arrival, departure in details["stations"]:
+            if name == station:
+                results.append(
+                    (train_no, details["name"], arrival, departure)
+                )
+
+    return sorted(results, key=lambda x: x[3])
+
+def create_station_index(trains):
+    index = {}
+
+    for train_no, details in trains.items():
+        for station, arrival, departure in details["stations"]:
+            index.setdefault(station, []).append(
+                (train_no, details["name"], arrival,
+                 departure, details["days"])
+            )
+
+    return index
+
+def search_with_index(index, station, day):
+    results = []
+
+    for train_no, name, arrival, departure, days in index.get(station, []):
+        if day in days:
+            results.append((train_no, name, arrival, departure))
+
+    return sorted(results, key=lambda x: x[3])
+
+station_index = create_station_index(trains)
+station = "Chennai"
+day = "Monday"
+
+print("\nTrains without index:")
+print(search_station(trains, station, day))
+
+print("\nTrains with index:")
+print(search_with_index(station_index, station, day))
+
+
+# Contact Normalisation and Merging
+
+def normalise_phone(phone):
+    digits = "".join(ch for ch in phone if ch.isdigit())
+
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+
+    return digits
+
+def normalise_name(name):
+    return " ".join(name.casefold().split())
+
+def normalise_email(email):
+    return email.strip().casefold()
+
+class UnionFind:
+    def __init__(self):
+        self.parent = {}
+
+    def find(self, x):
+        if x not in self.parent:
+            self.parent[x] = x
+
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+
+        return self.parent[x]
+
+    def union(self, a, b):
+        root_a = self.find(a)
+        root_b = self.find(b)
+
+        if root_a != root_b:
+            self.parent[root_b] = root_a
+
+def merge_contacts(contacts):
+    uf = UnionFind()
+    processed = []
+
+    for contact in contacts:
+        name = contact.get("name", "").strip()
+
+        phones = {
+            normalise_phone(p)
+            for p in contact.get("phones", [])
+            if normalise_phone(p)
+        }
+
+        emails = {
+            normalise_email(e)
+            for e in contact.get("emails", [])
+            if normalise_email(e)
+        }
+
+        processed.append({
+            "name": name,
+            "phones": phones,
+            "emails": emails
+        })
+
+        identifiers = (
+            {"P:" + p for p in phones}
+            | {"E:" + e for e in emails}
+        )
+
+        if identifiers:
+            first = next(iter(identifiers))
+
+            for identifier in identifiers:
+                uf.union(first, identifier)
+
+    merged = {}
+
+    for contact in processed:
+        identifiers = (
+            {"P:" + p for p in contact["phones"]}
+            | {"E:" + e for e in contact["emails"]}
+        )
+
+        if identifiers:
+            root = uf.find(next(iter(identifiers)))
+        else:
+            root = "EMPTY:" + str(id(contact))
+
+        if root not in merged:
+            merged[root] = {
+                "names": set(),
+                "phones": set(),
+                "emails": set()
+            }
+
+        if contact["name"]:
+            merged[root]["names"].add(contact["name"])
+
+        merged[root]["phones"].update(contact["phones"])
+        merged[root]["emails"].update(contact["emails"])
+
+    return list(merged.values())
+
+contacts = [
+    {
+        "name": "Dr. Ravi",
+        "phones": ["+91 98400 12345"],
+        "emails": ["ravi@gmail.com"]
+    },
+    {
+        "name": "ravi kumar",
+        "phones": ["9840012345"],
+        "emails": ["ravi.kumar@gmail.com"]
+    },
+    {
+        "name": "Anu",
+        "phones": ["9876543210"],
+        "emails": ["anu@gmail.com"]
+    },
+    {
+        "name": "Anu",
+        "phones": ["+91-98765-43210"],
+        "emails": ["ANU@gmail.com"]
+    },
+    {
+        "name": "Kumar",
+        "phones": [],
+        "emails": ["kumar@gmail.com"]
+    },
+    {
+        "name": "Ravi",
+        "phones": [],
+        "emails": []
+    }
+]
+
+result = merge_contacts(contacts)
+
+print("\nMerged Contacts:")
+
+for contact in result:
+    print("\nNames:", sorted(contact["names"]))
+    print("Phone Numbers:", sorted(contact["phones"]))
+    print("Emails:", sorted(contact["emails"]))
+
+print("\nPhone Normalisation:")
+print(normalise_phone("+91 98400 12345"))
+print(normalise_phone("9840012345"))
+
+same_name_contacts = [
+    {
+        "name": "Ravi",
+        "phones": ["9000000001"],
+        "emails": []
+    },
+    {
+        "name": "Ravi",
+        "phones": ["9000000002"],
+        "emails": []
+    }
+]
+
+print("\nSame Name Test:")
+print(merge_contacts(same_name_contacts))
+ 
